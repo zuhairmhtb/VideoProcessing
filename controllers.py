@@ -87,8 +87,7 @@ class MyNeuralNetwork:
         :param label: The numpy 2D binary/grayscale expected noise label array
         :return: The numpy 2D binary/grayscale input edge image array and predicted noise label array
         """
-        import pdb
-        pdb.set_trace()
+
         if len(img.shape) >= 2 and img.shape[-2:] == (self.inp_w, self.inp_h) and label.shape[-2:] == (self.out_h, self.out_w):
             K.set_session(self.session)
             with self.graph.as_default():
