@@ -10,6 +10,7 @@ from keras.wrappers.scikit_learn import KerasRegressor
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from scipy.ndimage.filters import gaussian_filter
 
 from skimage.measure import compare_ssim
 from skimage.segmentation import slic, mark_boundaries
@@ -263,6 +264,7 @@ class VideoProcessingController(CommonInstance):
                     # Get area of each contour/object in the image. Each object is assumed to be in a rectangular region
                     contour_sizes = [cv2.boundingRect(contours[i])[2] * cv2.boundingRect(contours[i])[3] for i in
                                      range(len(contours))]
+                    self.sleep(0.01)
                     # Sort the objects by ascending area
                     contour_order = np.argsort(contour_sizes)
                     # Get number of contours to plot
@@ -275,7 +277,7 @@ class VideoProcessingController(CommonInstance):
                         #print("Obtaining object from contour number: " + str(i) + " out of " + str(len(contour_order) - total_plots - 1))
                         (x, y, w, h) = cv2.boundingRect(contours[contour_order[i]])
                         identified_objects.append(frame[y:y+h, x:x+w])
-
+                        self.sleep(0.01)
                     result_view_frame.append(identified_objects)
                     #self.sleep(100)
                 else:
@@ -306,17 +308,20 @@ class VideoProcessingController(CommonInstance):
                 objects = result_view_frame[0]
                 if not (objects is None) and self.plot_contours:
                     video_proc_int.contour_object_detection_module.view_controls["object"].plot(objects)
+                    self.sleep(0.01)
                     #self.sleep(100)
                 # Display Thresholded image
                 thresholded = result_view_frame[1]
                 if not (thresholded is None) and self.plot_thresholding:
                     video_proc_int.threshold_histogram_module.view_controls["threshold"].plot([thresholded])
+                    self.sleep(0.01)
                     #self.sleep(100)
                 # Display Histogram
                 gray_image = result_view_frame[2]
                 if not (gray_image is None) and self.plot_histogram:
                     video_proc_int.threshold_histogram_module.view_controls["histogram"].plot([gray_image],
                                                                                               histogram=True)
+                    self.sleep(0.01)
 
                  # Display Noise Estimation
                 last_frames = self.main_thread.get_last_frame_queue(nmax=10).copy()
@@ -328,7 +333,7 @@ class VideoProcessingController(CommonInstance):
                     last_edge_frames = [last_frames[i][3].copy() for i in range(len(last_frames))] + [current_edge_frame]
 
                     results = [compare_ssim(last_edge_frames[i-1], last_edge_frames[i], full=True) for i in range(1, len(last_edge_frames), 1)]
-
+                    self.sleep(0.01)
                     current_edge_labels = [results[i][1] for i in range(len(results))]
                     current_edge_inputs = last_edge_frames[1:]
 
@@ -341,20 +346,23 @@ class VideoProcessingController(CommonInstance):
                     self.neural_net.train(
                         np.asarray(current_edge_inputs), np.asarray(current_edge_labels))
                     #self.sleep(100)
-
+                    self.sleep(0.01)
                     prediction, inp = self.neural_net.predict(
                         np.asarray(current_edge_inputs[-1]))
                     # Resize the predicted noise image for display
                     prediction = cv2.resize(prediction, current_edge_frame.shape, interpolation=cv2.INTER_CUBIC)
+
                     video_proc_int.noise_detection_module.input_display_canvas.plot(
                         [cv2.resize(inp, current_edge_frame.shape, interpolation=cv2.INTER_CUBIC)]
                     )
+                    self.sleep(0.01)
                     video_proc_int.noise_detection_module.expected_out_display_canvas.plot(
                         [current_edge_labels[-1]]
                     )
                     video_proc_int.noise_detection_module.predicted_out_display_canvas.plot(
                         [prediction]
                     )
+                    self.sleep(0.01)
 
 
             self.sleep(self.thread_sleep_time_sec)
@@ -410,6 +418,10 @@ class WebcamPlayerController(CommonInstance):
         self.canny_thresh2 = 80
         self.laplacian_ksize = 3
         self.sobel_ksize = 3
+        self.erosiona_ksize = 0
+        self.dilationa_ksize = 0
+        self.erosionb_ksize = 0
+        self.dilationb_ksize = 0
         # Contour Setting
         self.contour_display_enabled = False
         self.contour_min_object_size = 50
@@ -488,6 +500,8 @@ class WebcamPlayerController(CommonInstance):
         print("Starting Webcam Player Thread")
         self.should_run = True
         cap = cv2.VideoCapture(0)  # Get an available webcam resource connected to the device
+        cap.set(4, self.original_frame_width)
+        cap.set(3, self.original_frame_height)
         add = True  # Checks whether to increase perspective of the edge detection procedure or decrease it
         while self.should_run:
             # Parameter Processing: Adjust dynamic parameters like perspective size before performing edge detection, etc.
@@ -507,8 +521,8 @@ class WebcamPlayerController(CommonInstance):
             # Original Frame Brightness processing
             ret, raw_frame = cap.read()  # Capture a frame in RGB format from the webcam
             frame = raw_frame.copy()
-            if frame.shape != (self.original_frame_width, self.original_frame_height):
-                frame = cv2.resize(frame, (self.original_frame_width, self.original_frame_height))
+            #if frame.shape != (self.original_frame_width, self.original_frame_height):
+             #   frame = cv2.resize(frame, (self.original_frame_width, self.original_frame_height))
             if self.contrast_level != 0:
                 frame = Image.fromarray(frame)
                 contrast = ImageEnhance.Contrast(frame)
@@ -536,7 +550,15 @@ class WebcamPlayerController(CommonInstance):
             if edge_image.shape != (self.edge_frame_width, self.edge_frame_height):
                 edge_image = cv2.resize(edge_image, (self.edge_frame_width, self.edge_frame_height), interpolation=cv2.INTER_CUBIC)
 
-
+            # Erosion and dilation
+            if self.erosiona_ksize > 0:
+                edge_image = cv2.erode(edge_image, np.ones((self.erosiona_ksize, self.erosiona_ksize), np.uint8), iterations=1)
+            if self.dilationa_ksize > 0:
+                edge_image = cv2.dilate(edge_image, np.ones((self.dilationa_ksize, self.dilationa_ksize), np.uint8), iterations=1)
+            if self.erosionb_ksize > 0:
+                edge_image = cv2.erode(edge_image, np.ones((self.erosionb_ksize, self.erosionb_ksize), np.uint8), iterations=1)
+            if self.dilationb_ksize > 0:
+                edge_image = cv2.dilate(edge_image, np.ones((self.dilationb_ksize, self.dilationb_ksize), np.uint8), iterations=1)
             # Find Contours and Hierarchy from the edge image
             _, contours, hierarchy = cv2.findContours(
                 edge_image.copy(),
@@ -558,3 +580,204 @@ class WebcamPlayerController(CommonInstance):
         :return: null
         """
         self.should_run = False
+def perform_image_segmentation():
+    from skimage.segmentation import felzenszwalb, quickshift, watershed
+    from skimage.filters import sobel, threshold_otsu, median
+    import matplotlib.pyplot as plt
+    from scipy.ndimage import distance_transform_edt
+    from skimage import measure, segmentation, feature, color, exposure
+    from sklearn.cluster import KMeans
+
+    cap = cv2.VideoCapture(0)
+    cap.set(3, 400)
+    cap.set(4, 400)
+    clusters = 20
+    #fig = plt.figure(1)
+    #ax = fig.subplots(2, 2)
+    #fig.suptitle("Gray, Blue, Green, Red")
+    model = KMeans(n_clusters=clusters)
+    orb = cv2.ORB_create()
+    last_frame = None
+
+    #plt.ion()
+    #plt.show(block=False)
+
+
+    while True:
+        ret, frame = cap.read()
+        contrast = ImageEnhance.Contrast(Image.fromarray(frame))
+        frame = np.array(contrast.enhance(2))
+
+        #frame = gaussian_filter(frame, 5, mode='nearest')
+        # Our operations on the frame come here
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = exposure.equalize_hist(gray)
+        gray = median(gray, selem=np.ones((5, 5)))
+
+
+        edge = Canny(gray, 50, 50)
+
+        # Calculate Histogram of Oriented Gradients
+        fd, hog_image = feature.hog(gray, orientations=8, pixels_per_cell=(16, 16),
+                            cells_per_block=(1, 1), visualize=True, multichannel=False, feature_vector=False)
+
+
+        orb_kp, orb_fd = orb.detectAndCompute(gray, None)
+
+        if not (last_frame is None):
+            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+            matches = bf.match(orb_fd, last_frame[2].copy())
+            matches = sorted(matches, key=lambda x: x.distance)
+            img_comp = cv2.drawMatches(gray.copy(), orb_kp.copy(), last_frame[0], last_frame[1], matches[:10], None)
+
+
+
+        dt = distance_transform_edt((~edge))  # Euclidean distance from edge
+        #dt = cv2.erode(dt, np.ones((10, 10)), iterations=1)
+        # Local Peaks by calculating the Euclidean distance map
+        # (Create automated markers for watershed background extraction)
+        local_max = feature.peak_local_max(dt, indices=False, min_distance=5)
+        # Create the markers from the local peaks(Connected component from the local max map)
+        markers = measure.label(local_max)
+        # Watershed algorithm to segment connected components from the negative Euclidean distance map
+        labels = watershed(-dt, markers)
+        # Calculate Region Properties from the watershed segmented map
+        regions = measure.regionprops(labels, intensity_image=gray)
+
+        # Calculate Mean intensities for each region of the  watershed segmented map
+        # in order for background segmentation using KMeans Clustering
+        region_means = [
+            [r.local_centroid[0], r.local_centroid[1], np.average(frame[r.coords[:, 0], r.coords[:, 1], 0]),
+             np.average(frame[r.coords[:, 0], r.coords[:, 1], 1]), np.average(frame[r.coords[:, 0], r.coords[:, 1], 2])]
+                        for r in regions]
+        # Reshape the mean intensity array as single column
+        region_means = np.asarray(region_means).reshape(-1, len(region_means[0]))
+        if region_means.size > 0 and np.count_nonzero(region_means) >= clusters-1:
+            # Fit mean intensities of the watershed background map as a feature vector of the model
+            model.fit(region_means)
+            # Predict foreground and background labels for mean intensity of each region of the watershed segmented map
+            kmeans_segmentation = model.predict(region_means)
+            # Get a copy of the watershed segmented map of different connected components in the image
+            classified_labels = labels.copy()
+            # For each label/cluster(background or foreground) of mean intensity of each connected component
+            for bg_fg, region in zip(kmeans_segmentation, regions):
+                # Set the color of the region as predicted label(foreground or background)
+                classified_labels[tuple(region.coords.T)] = bg_fg
+
+        #print(str(type(local_max)) + " " + str(local_max.shape) + " max: " + str(local_max.max()))
+        #segments = slic(frame, n_segments=100, compactness=10, sigma=1)
+        #segments = felzenszwalb(gray, scale=100, sigma=0.5, min_size=100)
+
+        cv2.imshow("Original", frame)
+        #cv2.imshow("Superpixels", mark_boundaries(frame, segments))
+        #cv2.imshow("Gray", gray)
+        cv2.imshow("HOG", exposure.rescale_intensity(hog_image, in_range=(0,10)))
+        #cv2.imshow("ORB", orb_img)
+        if not (last_frame is None):
+            cv2.imshow("ORB", img_comp)
+        last_frame = [gray.copy(), orb_kp.copy(), orb_fd.copy()]
+        cv2.imshow("Edges", edge.astype(np.float32))
+        cv2.imshow("Distance", dt/dt.max())
+        markers[markers>0] = 1
+        #cv2.imshow("Markers", markers.astype(np.float32))
+        #cv2.imshow("Peaks", local_max.astype(np.float32))
+        cv2.imshow("Watershed", color.label2rgb(labels, image=gray, kind='avg'))
+        if region_means.size > 0 and np.count_nonzero(region_means) >= clusters-1:
+            cv2.imshow("Kmeans", color.label2rgb(classified_labels, image=gray))
+
+            """plt.clf()
+            cols = 3
+            rows = int(len(regions)/cols)+1
+            
+            for i in range(len(regions)):
+                coords = regions[i].coords
+                print(len(coords[:,0]))
+                img = np.zeros(gray.shape, dtype=gray.dtype)
+                img[coords[:,0], coords[:,1]] = gray[coords[:,0], coords[:,1]]
+                plt.subplot(rows, cols, i+1)
+                plt.imshow(img)
+            #plt.hist(region_means, bins=256)
+            plt.pause(0.001)"""
+
+
+
+        #edge = cv2.Canny(gray, 100, 200)
+        """edge = sobel(gray)
+        edge_b = sobel(frame[:,:,0])
+        edge_g = sobel(frame[:,:,1])
+        edge_r = sobel(frame[:,:,2])
+
+        frame_float = img_as_float(gray)
+        #segments_slic = slic(frame_float, n_segments=100, compactness=10, sigma=1)
+        #segments_felz = felzenszwalb(frame_float, scale=100, sigma=0.5, min_size=50)
+        #segments_watershed = watershed(edge, markers=250, compactness=0.001)
+        otsu_thresh = threshold_otsu(gray)
+        otsu_thresh_b = threshold_otsu(frame[:,:,0])
+        otsu_thresh_g = threshold_otsu(frame[:, :, 1])
+        otsu_thresh_r = threshold_otsu(frame[:, :, 2])
+
+        otsu_mask = gray > otsu_thresh
+        otsu_mask_b = gray > otsu_thresh_b
+        otsu_mask_g = gray > otsu_thresh_g
+        otsu_mask_r = gray > otsu_thresh_r
+        #otsu_mask = segmentation.clear_border(otsu_mask)
+        frame_otsu = otsu_mask.astype(np.uint8)
+        frame_otsu_b = otsu_mask_b.astype(np.uint8)
+        frame_otsu_g = otsu_mask_g.astype(np.uint8)
+        frame_otsu_r = otsu_mask_r.astype(np.uint8)
+        frame_otsu[frame_otsu > 0] = 255
+        frame_otsu_b[frame_otsu_b > 0] = 255
+        frame_otsu_g[frame_otsu_g > 0] = 255
+        frame_otsu_r[frame_otsu_r > 0] = 255
+
+
+
+
+        # Display the resulting frame
+        #cv2.imshow('frame', frame)
+        #cv2.imshow('Gray', gray)
+        #cv2.imshow("Edge", edge)
+        #cv2.imshow("Otsu", frame_otsu)
+
+        #cv2.imshow("Blue O C", edge_b)
+        #cv2.imshow("Green O C", edge_g)
+        #cv2.imshow("Red O C", edge_r)
+        #cv2.imshow("Blue C", frame[:,:,0])
+        #cv2.imshow("Green C", frame[:, :, 1])
+        #cv2.imshow("Red C", frame[:, :, 2])"""
+
+        """ax[0][0].clear()
+        ax[0][0].grid()
+        ax[0][0].hist(gray.ravel(), 256, [0, 256])
+        ax[0][0].set_title("Gray")
+        plt.pause(0.001)
+
+        ax[0][1].clear()
+        ax[0][1].grid()
+        ax[0][1].hist(frame[:,:,0].ravel(), 256, [0, 256])
+        ax[0][1].set_title("Blue")
+
+        ax[1][0].clear()
+        ax[1][0].grid()
+        ax[1][0].hist(frame[:,:,1].ravel(), 256, [0, 256])
+        ax[1][0].set_title("Green")
+
+        ax[1][1].clear()
+        ax[1][1].grid()
+        ax[1][1].hist(frame[:,:,2].ravel(), 256, [0, 256])
+        ax[1][1].set_title("Red")
+
+
+
+        plt.pause(0.001)"""
+
+
+        #cv2.imshow("SLIC", mark_boundaries(frame_float, segments_slic))
+        #cv2.imshow("Felzenszwalb", mark_boundaries(frame_float, segments_felz))
+        #cv2.imshow("Watershed", mark_boundaries(frame_float, segments_watershed))
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    plt.show()
+    cap.release()
+    cv2.destroyAllWindows()
+perform_image_segmentation()

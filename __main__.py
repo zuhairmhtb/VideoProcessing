@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGr
 from PyQt5.QtGui import QIcon
 from MyNet.image_segmentation.video_processing_software.interfaces import MainInterface
 from MyNet.image_segmentation.video_processing_software.widgets import MyTabWidget
-from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout
+from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout
 from MyNet.image_segmentation.video_processing_software.controllers import WebcamPlayerController, VideoProcessingController
 
 
@@ -120,6 +120,7 @@ class App(QMainWindow):
         self.available_interfaces = OrderedDict()
         self.available_interfaces["Webcam Player"] = WebcamPlayerLayout(self, default_original_frame_width, default_original_frame_height)
         self.available_interfaces["Video Processing"] = VideoProcessingLayout(self, default_original_frame_width, default_original_frame_height)
+        self.available_interfaces["Neural Network"] = NeuralNetworkLayout(self, default_original_frame_width, default_original_frame_height)
 
 
         # Video Processor Setup
@@ -199,6 +200,7 @@ class App(QMainWindow):
         webcam_player_int.auto_adjustment_control_input["edge size"][2].textChanged.connect(
             self.set_edge_size_adjustment_params)
 
+
         webcam_player_int.frame_process_control_inputs["original"][0].setText(str(
             self.webcam_player_controller.original_frame_width
         ))
@@ -223,7 +225,10 @@ class App(QMainWindow):
         webcam_player_int.edge_detect_controls["edge detection"][0].currentTextChanged.connect(self.set_edge_detection_alg)
         webcam_player_int.edge_detect_controls["contour detection"][0].clicked.connect(self.toggle_contour_enable)
         webcam_player_int.edge_detect_controls["contour detection"][1].setText(str(self.webcam_player_controller.contour_min_object_size))
-
+        webcam_player_int.edge_detect_controls["erosion"][0].valueChanged.connect(self.set_erosion_dilation_param)
+        webcam_player_int.edge_detect_controls["erosion"][1].valueChanged.connect(self.set_erosion_dilation_param)
+        webcam_player_int.edge_detect_controls["erosion"][2].valueChanged.connect(self.set_erosion_dilation_param)
+        webcam_player_int.edge_detect_controls["erosion"][3].valueChanged.connect(self.set_erosion_dilation_param)
 
 
         self.initUI()  # Initialize the main window
@@ -337,6 +342,34 @@ class App(QMainWindow):
         webcam_player_int = self.available_interfaces["Webcam Player"]
         self.webcam_player_controller.selected_edge_algorithm = str(webcam_player_int.edge_detect_controls["edge detection"][0].currentText())
 
+    def set_erosion_dilation_param(self):
+        webcam_player_int = self.available_interfaces["Webcam Player"]
+        try:
+            print("Calculating")
+            erosion_dilation = webcam_player_int.edge_detect_controls["erosion"]
+            erosion_a = int(erosion_dilation[0].value())
+            dilation_a = int(erosion_dilation[1].value())
+            erosion_b = int(erosion_dilation[2].value())
+            dilation_b = int(erosion_dilation[3].value())
+            if erosion_a >= 0:
+                if erosion_a != 0 and erosion_a%2 == 0:
+                    erosion_a += 1
+                self.webcam_player_controller.erosiona_ksize = erosion_a
+            if erosion_b >= 0:
+                if erosion_b != 0 and erosion_b%2 == 0:
+                    erosion_b += 1
+                self.webcam_player_controller.erosionb_ksize = erosion_b
+            if dilation_a >= 0:
+                if dilation_a != 0 and dilation_a%2 == 0:
+                    dilation_a += 1
+                self.webcam_player_controller.dilationa_ksize = dilation_a
+            if dilation_b >= 0:
+                if dilation_b != 0 and dilation_b%2 == 0:
+                    dilation_b += 1
+                self.webcam_player_controller.dilationb_ksize = dilation_b
+        except:
+            print("error")
+
     def toggle_contour_enable(self):
         webcam_player_int = self.available_interfaces["Webcam Player"]
         self.webcam_player_controller.contour_display_enabled = webcam_player_int.edge_detect_controls["contour detection"][0].isChecked()
@@ -398,7 +431,7 @@ class App(QMainWindow):
         if self.video_processing_controller.isRunning() or self.video_processing_controller.should_run:
             self.video_processing_controller.stop_thread()
 
-        self.video_processing_controller.neural_net.save_model()
+        #self.video_processing_controller.neural_net.save_model()
 
 
     def initUI(self):

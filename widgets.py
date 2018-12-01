@@ -97,11 +97,13 @@ class ImageDisplayWidget(QtWidgets.QWidget):
         self.image = QtGui.QImage()
 
 class GraphDisplayWidget:
-    def __init__(self, parent, fig_num, default_image_path=None, rows=1,cols=1, width=5, height=4, dpi=100):
+    def __init__(self, parent, fig_num, default_image_path=None):
         default_img_path = default_image_path
-        self.fig = plt.figure(fig_num)
+        self.fig = plt.figure(num=fig_num)
 
         self.canvas = FigureCanvas(self.fig)
+
+
         self.toolbar = NavigationToolbar(self.canvas, parent)
         if not (default_image_path is None):
             self.plot([np.array(cv2.imread(default_image_path))])
@@ -117,7 +119,7 @@ class GraphDisplayWidget:
         if not histogram:
             for i in range(len(images)):
                 ax = self.fig.add_subplot(1, len(images), i+1)
-                if not (images[i] is None):
+                if (not (images[i] is None)) and (images[i].size > 0):
                     ax.imshow(images[i])
         else:
             for i in range(len(images)):

@@ -201,6 +201,71 @@ class WebcamPlayerLayout(CommonLayout):
         control_containers["edge detection"] = [edge_widget, edge_layout]
         main_widget_layout.addWidget(edge_widget)
 
+
+        erosion_widget = QGroupBox("Erosion & Dilation", self.my_parent)
+        erosion_widget_layout = QHBoxLayout()
+        erosion_widget.setLayout(erosion_widget_layout)
+
+        erosiona_widget = QGroupBox("Erosion 1", self.my_parent)
+        erosiona_layout = QVBoxLayout()
+        erosiona_widget.setLayout(erosiona_layout)
+        erosiona_label = QLabel("Erosion 1 Kernel", self.my_parent)
+        erosiona_slider = QSlider(Qt.Horizontal)
+        erosiona_slider.setMinimum(0)
+        erosiona_slider.setMaximum(11)
+        erosiona_slider.setSingleStep(1)
+        erosiona_slider.setTickInterval(1)
+        erosiona_slider.setValue(0)
+        erosiona_layout.addWidget(erosiona_label)
+        erosiona_layout.addWidget(erosiona_slider)
+        erosion_widget_layout.addWidget(erosiona_widget)
+
+        dilationa_widget = QGroupBox("Dilation 1", self.my_parent)
+        dilationa_layout = QVBoxLayout()
+        dilationa_widget.setLayout(dilationa_layout)
+        dilationa_label = QLabel("Kernel", self.my_parent)
+        dilationa_slider = QSlider(Qt.Horizontal)
+        dilationa_slider.setMinimum(0)
+        dilationa_slider.setMaximum(11)
+        dilationa_slider.setSingleStep(1)
+        dilationa_slider.setTickInterval(1)
+        dilationa_slider.setValue(0)
+        dilationa_layout.addWidget(dilationa_label)
+        dilationa_layout.addWidget(dilationa_slider)
+        erosion_widget_layout.addWidget(dilationa_widget)
+
+        erosionb_widget = QGroupBox("Erosion 2", self.my_parent)
+        erosionb_layout = QVBoxLayout()
+        erosionb_widget.setLayout(erosionb_layout)
+        erosionb_label = QLabel("Erosion 2 Kernel", self.my_parent)
+        erosionb_slider = QSlider(Qt.Horizontal)
+        erosionb_slider.setMinimum(0)
+        erosionb_slider.setMaximum(11)
+        erosionb_slider.setSingleStep(1)
+        erosionb_slider.setTickInterval(1)
+        erosionb_slider.setValue(0)
+        erosionb_layout.addWidget(erosionb_label)
+        erosionb_layout.addWidget(erosionb_slider)
+        erosion_widget_layout.addWidget(erosionb_widget)
+
+        dilationb_widget = QGroupBox("Dilation 2", self.my_parent)
+        dilationb_layout = QVBoxLayout()
+        dilationb_widget.setLayout(dilationb_layout)
+        dilationb_label = QLabel("Dilation 2 Kernel", self.my_parent)
+        dilationb_slider = QSlider(Qt.Horizontal)
+        dilationb_slider.setMinimum(0)
+        dilationb_slider.setMaximum(11)
+        dilationb_slider.setSingleStep(1)
+        dilationb_slider.setTickInterval(1)
+        dilationb_slider.setValue(0)
+        dilationb_layout.addWidget(dilationb_label)
+
+        dilationb_layout.addWidget(dilationb_slider)
+        erosion_widget_layout.addWidget(dilationb_widget)
+        controls["erosion"] = [erosiona_slider, dilationa_slider, erosionb_slider, dilationb_slider]
+        control_containers["erosion"] = [erosion_widget, erosion_widget_layout]
+        main_widget_layout.addWidget(erosion_widget)
+
         contour_widget = QGroupBox("Contour Detection", self.my_parent)
         contour_layout = QHBoxLayout(self.my_parent)
         contour_widget.setLayout(contour_layout)
@@ -258,7 +323,7 @@ class WebcamPlayerLayout(CommonLayout):
 
 
 class ContourObjectDetectionModule:
-    def __init__(self, parent, fig_num, default_image=None):
+    def __init__(self, parent, fig_num, fig_width, fig_height, default_image=None):
         self.default_image = default_image
         self.object_display_canvas = GraphDisplayWidget(parent, fig_num, default_image_path=self.default_image)
 
@@ -286,8 +351,12 @@ class ContourObjectDetectionModule:
         self.controls = {"contour amount": self.display_control_amount_inp, "enable": self.enable_module_checkbox,
                          "navigation": self.object_display_canvas.get_figure_toolbar()}
 
-        self.view_widget_scrollbar = QScrollArea()
+        self.view_widget_scrollbar = QScrollArea(parent)
+        self.view_widget_scrollbar.setMinimumWidth(fig_width)
+        self.view_widget_scrollbar.setMinimumHeight(fig_height)
         self.view_widget_contour = QGroupBox("Identified Objects", self.view_widget_scrollbar)
+
+
         self.view_widget_layout = QHBoxLayout()
         self.view_widget_contour.setLayout(self.view_widget_layout)
 
@@ -313,7 +382,7 @@ class ContourObjectDetectionModule:
 
 
 class ThresholdingModule:
-    def __init__(self, parent, fig_num_thresh, fig_num_hist, default_image=None):
+    def __init__(self, parent, fig_num_thresh, fig_num_hist, fig_width, fig_height, default_image=None):
         self.default_image = default_image
         self.threshold_display_canvas = GraphDisplayWidget(parent, fig_num_thresh, default_image_path=self.default_image)
         self.histogram_display_canvas = GraphDisplayWidget(parent, fig_num_hist, default_image_path=self.default_image)
@@ -349,6 +418,9 @@ class ThresholdingModule:
                          "histogram toolbar": self.histogram_display_canvas.get_figure_toolbar()}
 
         self.view_widget_scrollbar = QScrollArea()
+        self.view_widget_scrollbar.setMinimumWidth(fig_width)
+        self.view_widget_scrollbar.setMinimumHeight(fig_height)
+        self.view_widget_scrollbar.setWidgetResizable(True)
         self.view_widget_threshold = QGroupBox("Thresholding and Histogram")
         self.view_widget_layout = QHBoxLayout()
         self.view_widget_threshold.setLayout(self.view_widget_layout)
@@ -356,7 +428,6 @@ class ThresholdingModule:
 
 
         self.view_widget_scrollbar.setWidget(self.view_widget_threshold)
-        self.view_widget_scrollbar.setWidgetResizable(True)
         self.view_widget_layout.addWidget(self.threshold_display_canvas.get_figure_canvas())
         self.view_widget_layout.addWidget(self.histogram_display_canvas.get_figure_canvas())
 
@@ -371,9 +442,21 @@ class ThresholdingModule:
 
     def get_view_controls(self):
         return self.view_controls
+class ImageSegmentationModule:
+    """
+    Layout for Image Segmentation output of VideoProcessing thread
+    Features:
+    1. Superpixels
+    2. Binary Segmentation-Foreground Extraction(Otsu's Algorithm, Graph Cut, Level Set/Chan Vese) & Connected Component Analysis(Gaussian Filters-Scikit)
+    3. Marker Based Segmentation-Image Segmentation(Watershed, Random Walker Algorithm)
+    4. Region Description-RegionProps
+
+    """
+    def __init__(self, parent, fig_num_inp, fig_num_exp, fig_num_out, fig_width, fig_height, default_image=None):
+        pass
 
 class NoiseDetectionModule:
-    def __init__(self, parent, fig_num_inp, fig_num_exp, fig_num_out, default_image=None):
+    def __init__(self, parent, fig_num_inp, fig_num_exp, fig_num_out, fig_width, fig_height, default_image=None):
         self.default_image_path = default_image
         self.input_display_canvas = GraphDisplayWidget(parent, fig_num_inp, default_image_path=self.default_image_path)
         self.expected_out_display_canvas = GraphDisplayWidget(parent, fig_num_exp, default_image_path=self.default_image_path)
@@ -503,8 +586,11 @@ class NoiseDetectionModule:
                          }
 
         self.view_widget_scrollbar = QScrollArea()
+        self.view_widget_scrollbar.setMinimumWidth(fig_width)
+        self.view_widget_scrollbar.setMinimumHeight(fig_height)
         self.view_widget_threshold = QGroupBox("Neural Network(Noise Estimation)", self.view_widget_scrollbar)
         self.view_widget_layout = QHBoxLayout()
+
         self.view_widget_threshold.setLayout(self.view_widget_layout)
 
 
@@ -534,11 +620,12 @@ class VideoProcessingLayout(CommonLayout):
         self.default_frame_width = default_frame_width
         self.default_frame_height = default_frame_height
         self.default_frame_image_path = "D:\\default.png"
-
+        self.plot_width = 400
+        self.plot_height = 200
         # Load Modules
-        self.contour_object_detection_module = ContourObjectDetectionModule(parent, 1, self.default_frame_image_path)
-        self.threshold_histogram_module = ThresholdingModule(parent, 2, self.default_frame_image_path)
-        self.noise_detection_module = NoiseDetectionModule(parent, 4, 5, 6, self.default_frame_image_path)
+        self.contour_object_detection_module = ContourObjectDetectionModule(parent, 1, self.plot_width, self.plot_height, self.default_frame_image_path)
+        self.threshold_histogram_module = ThresholdingModule(parent, 2, 3, self.plot_width, self.plot_height, self.default_frame_image_path)
+        self.noise_detection_module = NoiseDetectionModule(parent, 4, 5, 6, self.plot_width, self.plot_height, self.default_frame_image_path)
 
 
         # Set Layout
@@ -566,3 +653,13 @@ class VideoProcessingLayout(CommonLayout):
         self.contour_view_params = self.contour_object_detection_module.get_view_controls()
         self.threshold_view_params = self.threshold_histogram_module.get_view_controls()
         self.noise_view_params = self.noise_detection_module.get_view_controls()
+class NeuralNetworkLayout(CommonLayout):
+    def __init__(self, parent, default_frame_width=200, default_frame_height=200):
+        super(NeuralNetworkLayout, self).__init__(parent)
+        self.my_parent = parent
+        self.default_frame_width = default_frame_width
+        self.default_frame_height = default_frame_height
+        self.default_frame_image_path = "D:\\default.png"
+        self.plot_width = 400
+        self.plot_height = 200
+
