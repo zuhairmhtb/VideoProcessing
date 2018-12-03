@@ -6,7 +6,7 @@ from PyQt5.QtGui import QIcon
 from MyNet.image_segmentation.video_processing_software.interfaces import MainInterface
 from MyNet.image_segmentation.video_processing_software.widgets import MyTabWidget
 from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout, ImageAnnotationLayout
-from MyNet.image_segmentation.video_processing_software.controllers import WebcamPlayerController, VideoProcessingController
+from MyNet.image_segmentation.video_processing_software.controllers import WebcamPlayerController, VideoProcessingController, ImageAnnotationController
 
 
 import  numpy as np
@@ -123,6 +123,10 @@ class App(QMainWindow):
         self.available_interfaces["Image Annotation"] = ImageAnnotationLayout(self, default_original_frame_width,
                                                                               default_original_frame_height)
         self.available_interfaces["Neural Network"] = NeuralNetworkLayout(self, default_original_frame_width, default_original_frame_height)
+
+
+        # Image Annotation Setup
+        self.image_annotation_controller = ImageAnnotationController(self, self.available_interfaces["Image Annotation"])
 
 
         # Video Processor Setup
@@ -266,9 +270,14 @@ class App(QMainWindow):
     def start_stream(self):
         if not self.webcam_player_controller.should_run:
             self.webcam_player_controller.start()
+
+        if not self.image_annotation_controller.should_run:
+            self.image_annotation_controller.start()
     def stop_stream(self):
         if self.webcam_player_controller.should_run:
             self.webcam_player_controller.should_run = False
+        if self.image_annotation_controller.should_run:
+            self.image_annotation_controller.should_run = False
 
     def change_brightness_params(self):
         brightness_controls = self.available_interfaces["Webcam Player"].brightness_control_sliders
@@ -432,6 +441,9 @@ class App(QMainWindow):
 
         if self.video_processing_controller.isRunning() or self.video_processing_controller.should_run:
             self.video_processing_controller.stop_thread()
+
+        if self.image_annotation_controller.isRunning() or self.image_annotation_controller.should_run:
+            self.image_annotation_controller.stop_thread()
 
         #self.video_processing_controller.neural_net.save_model()
 

@@ -10,13 +10,20 @@ from keras.wrappers.scikit_learn import KerasRegressor
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
 from scipy.ndimage.filters import gaussian_filter
 
 from skimage.measure import compare_ssim
 from skimage.segmentation import slic, mark_boundaries
+from skimage.segmentation import felzenszwalb, quickshift, watershed
+from skimage.filters import sobel, threshold_otsu, median
+from scipy.ndimage import distance_transform_edt
+from skimage import measure, segmentation, feature, color, exposure
 from skimage.util import img_as_float
 from tensorflow import Graph, Session
 from keras import backend as K
+
+from MyNet.image_segmentation.video_processing_software.layouts import ImageAnnotationLayout
 
 
 # your logic here
@@ -290,6 +297,156 @@ class ImageAnnotationController(CommonInstance):
                1.8 Annotation File(XML-PASCAL VOC)
                1.9 Label File(JSON-Data Hierarchical Structure)
     """
+    def __init__(self, main_thread, image_annotate_interface:ImageAnnotationLayout):
+        super().__init__()
+        self.main_thread = main_thread
+        self.layout = image_annotate_interface
+
+
+        self.frame_width = self.layout.default_frame_width
+        self.frame_height = self.layout.default_frame_height
+        self.hog_cells_per_block = self.layout.hog_cells_per_block
+        self.hog_pixels_per_cell = self.layout.hog_pixels_per_cell
+        self.hog_orientation = self.layout.hog_orientation
+        self.kmeans_clusters = self.layout.kmeans_clusters
+        self.orb_features = self.layout.orb_features
+        self.hold_frame = self.layout.image_opt_widgets['hold frame']['widget'].isChecked()
+        self.img_mode = self.layout.image_opt_widgets['image mode']['widget'].currentText()
+        self.img_save_dir = self.layout.base_img_save_dir
+
+        self.last_updated_features = None
+
+
+    def stop_thread(self):
+        self.should_run = False
+
+    def run(self):
+        print("Starting Image Annotation Thread")
+        self.should_run = True
+
+        while self.should_run:
+            if not self.hold_frame:
+                # frame_object = [raw_frame, frame, gray_image, edge_image, contours, hierarchy]
+                current_frame = self.main_thread.get_current_frame()
+
+                if not (current_frame is None):
+
+                    current_frame = current_frame.copy()
+                    # Result frame containing features: [raw frame(RGB/Gray), Edge frame(Binary), Orientation Frame(Gray),
+                    # orientation features(List), Distance Map(Gray), Region Properties(List),
+                    #Cluster Image(RGB), Feature Descriptor(Array), Feature Descriptor Image(Array)]
+                    result_view_frame = []
+                    frame = cv2.resize(current_frame[1], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
+                    result_view_frame.append(frame)
+                    gray = cv2.resize(current_frame[2], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
+                    gray = exposure.equalize_hist(gray)
+                    gray = median(gray, selem=np.ones((5, 5)))
+                    edge = cv2.resize(current_frame[3], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
+
+                    result_view_frame.append(edge)
+
+
+
+                    fd, hog_image = feature.hog(gray, orientations=self.hog_orientation,
+                                                pixels_per_cell=(self.hog_pixels_per_cell, self.hog_pixels_per_cell),
+                                                cells_per_block=(self.hog_cells_per_block, self.hog_cells_per_block),
+                                                visualize=True, multichannel=False, feature_vector=False)
+                    result_view_frame.append(hog_image.copy())
+                    result_view_frame.append(fd)
+
+
+
+                    dt = distance_transform_edt((~edge))  # Euclidean distance from edge
+                    result_view_frame.append(dt.copy())
+                    # dt = cv2.erode(dt, np.ones((10, 10)), iterations=1)
+                    # Local Peaks by calculating the Euclidean distance map
+                    # (Create automated markers for watershed background extraction)
+                    local_max = feature.peak_local_max(dt, indices=False, min_distance=5)
+                    # Create the markers from the local peaks(Connected component from the local max map)
+                    markers = measure.label(local_max)
+                    # Watershed algorithm to segment connected components from the negative Euclidean distance map
+                    labels = watershed(-dt, markers)
+
+                    # Calculate Region Properties from the watershed segmented map
+                    regions = measure.regionprops(labels, intensity_image=gray)
+                    result_view_frame.append(regions)
+                    # Calculate Mean intensities for each region of the  watershed segmented map
+                    # in order for background segmentation using KMeans Clustering
+                    region_means = [
+                        [r.local_centroid[0], r.local_centroid[1], np.average(frame[r.coords[:, 0], r.coords[:, 1], 0]),
+                         np.average(frame[r.coords[:, 0], r.coords[:, 1], 1]),
+                         np.average(frame[r.coords[:, 0], r.coords[:, 1], 2])]
+                        for r in regions]
+                    # Reshape the mean intensity array as single column
+                    region_means = np.asarray(region_means).reshape(-1, len(region_means[0]))
+
+
+                    classified_labels = None
+                    if region_means.size > 0 and np.count_nonzero(region_means) >= self.kmeans_clusters - 1:
+                        # Fit mean intensities of the watershed background map as a feature vector of the model
+                        model = KMeans(n_clusters=self.kmeans_clusters)
+                        model.fit(region_means)
+                        # Predict foreground and background labels for mean intensity of each region of the watershed segmented map
+                        kmeans_segmentation = model.predict(region_means)
+                        # Get a copy of the watershed segmented map of different connected components in the image
+                        classified_labels = labels.copy()
+                        # For each label/cluster(background or foreground) of mean intensity of each connected component
+                        for bg_fg, region in zip(kmeans_segmentation, regions):
+                            # Set the color of the region as predicted label(foreground or background)
+                            classified_labels[tuple(region.coords.T)] = bg_fg
+                    result_view_frame.append(classified_labels)
+
+
+                    orb = cv2.ORB_create(nfeatures=self.orb_features)
+                    orb_kp, orb_fd = orb.detectAndCompute(gray, None)
+                    orb_img = cv2.drawKeypoints(gray, orb_kp, None)
+                    result_view_frame.append((orb_kp, orb_fd))
+                    result_view_frame.append(orb_img)
+
+                    # self.annotation_img_view_options = ['color', 'edges', 'orientation', 'distance', 'clusters', 'orb']
+                    self.layout.view_widgets['color']['widget'].update_image(frame)
+                    self.layout.view_widgets['edges']['widget'].update_image(
+                        ((edge/edge.max()) * 255).astype(np.uint8)
+                    )
+                    self.layout.view_widgets['orientation']['widget'].update_image(
+                        ((exposure.rescale_intensity(hog_image, in_range=(0,hog_image.max())))*255).astype(np.uint8)
+                    )
+
+                    self.layout.view_widgets['distance']['widget'].update_image(
+                        ((exposure.rescale_intensity(dt, in_range=(dt.min(), dt.max()))) * 255).astype(np.uint8)
+                    )
+                    if not (classified_labels is None):
+                        self.layout.view_widgets['clusters']['widget'].update_image(
+                            ((classified_labels.astype(np.float64)/classified_labels.max())*255).astype(np.uint8)
+                        )
+                    self.layout.view_widgets['orb']['widget'].update_image(orb_img)
+
+                    self.last_updated_features = result_view_frame
+            else:
+                # Result frame containing features: [raw frame(RGB/Gray), Edge frame(Binary), Orientation Frame(Gray),
+                # orientation features(List), Distance Map(Gray), Region Properties(List),
+                # Cluster Image(RGB), Feature Descriptor(Array), Feature Descriptor Image(Array)]
+                if not (self.last_updated_features is None):
+                    self.layout.view_widgets['color']['widget'].update_image(result_view_frame[0])
+                    self.layout.view_widgets['edges']['widget'].update_image(
+                        ((result_view_frame[1] / result_view_frame[1].max()) * 255).astype(np.uint8)
+                    )
+                    self.layout.view_widgets['orientation']['widget'].update_image(
+                        ((exposure.rescale_intensity(result_view_frame[2], in_range=(0, result_view_frame[2].max()))) * 255).astype(np.uint8)
+                    )
+
+                    self.layout.view_widgets['distance']['widget'].update_image(
+                        ((exposure.rescale_intensity(result_view_frame[4], in_range=(result_view_frame[4].min(), result_view_frame[4].max()))) * 255).astype(np.uint8)
+                    )
+                    if not (classified_labels is None):
+                        self.layout.view_widgets['clusters']['widget'].update_image(
+                            ((result_view_frame[6].astype(np.float64) / result_view_frame[6].max()) * 255).astype(np.uint8)
+                        )
+                    self.layout.view_widgets['orb']['widget'].update_image(result_view_frame[8])
+
+
+            self.sleep(self.thread_sleep_time_sec)
+
 class VideoProcessingController(CommonInstance):
     """
     This is the Video Processing interface that runs on a separate thread and uses Image Processing on Images
@@ -320,7 +477,7 @@ class VideoProcessingController(CommonInstance):
     def __init__(self, main_thread, video_proc_int):
         super().__init__()
         self.video_proc_int = video_proc_int
-        self.thread_sleep_time_sec = 1
+        #self.thread_sleep_time_sec = 1
         self.main_thread = main_thread
         self.plot_histogram = True  # Toggle Original Webcam frame's histogram plot window(Matplotlib)
         self.plot_contours = False  # Toggle Original Webcam frame's contour plot for boundary detection in edges
@@ -383,6 +540,7 @@ class VideoProcessingController(CommonInstance):
                 contours = current_frame[4].copy()
                 edge_frame = current_frame[3].copy()
                 gray_image = current_frame[2].copy()
+
                 frame = current_frame[1].copy()
                 # If identified objects in the edge frame is available
                 if self.plot_contours and len(contours) > 0:
@@ -707,12 +865,9 @@ class WebcamPlayerController(CommonInstance):
         """
         self.should_run = False
 def perform_image_segmentation():
-    from skimage.segmentation import felzenszwalb, quickshift, watershed
-    from skimage.filters import sobel, threshold_otsu, median
+
     import matplotlib.pyplot as plt
-    from scipy.ndimage import distance_transform_edt
-    from skimage import measure, segmentation, feature, color, exposure
-    from sklearn.cluster import KMeans
+
 
     cap = cv2.VideoCapture(0)
     cap.set(3, 400)

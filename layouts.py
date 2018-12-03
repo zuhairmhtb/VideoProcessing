@@ -663,7 +663,7 @@ class NeuralNetworkLayout(CommonLayout):
         self.default_frame_height = default_frame_height
         self.default_frame_image_path = "D:\\default.png"
         self.plot_width = 400
-        self.plot_height = 200
+        self.plot_height = 400
 
 class ImageAnnotationLayout(CommonLayout):
     def __init__(self, parent, default_frame_width=200, default_frame_height=200):
@@ -672,8 +672,8 @@ class ImageAnnotationLayout(CommonLayout):
         self.default_frame_width = default_frame_width
         self.default_frame_height = default_frame_height
         self.default_frame_image_path = "D:\\default.png"
-        self.plot_width = 400
-        self.plot_height = 200
+        #self.plot_width = 400
+        #self.plot_height = 200
         self.hog_cells_per_block = 1
         self.hog_pixels_per_cell = 16
         self.hog_orientation = 8
