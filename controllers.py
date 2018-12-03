@@ -596,9 +596,10 @@ def perform_image_segmentation():
     #ax = fig.subplots(2, 2)
     #fig.suptitle("Gray, Blue, Green, Red")
     model = KMeans(n_clusters=clusters)
-    orb = cv2.ORB_create()
+    orb = cv2.ORB_create(nfeatures=100)
     last_frame = None
-
+    current = int(round(time.time() * 1000))
+    update_duration = 2000
     #plt.ion()
     #plt.show(block=False)
 
@@ -673,9 +674,13 @@ def perform_image_segmentation():
         #cv2.imshow("Gray", gray)
         cv2.imshow("HOG", exposure.rescale_intensity(hog_image, in_range=(0,10)))
         #cv2.imshow("ORB", orb_img)
-        if not (last_frame is None):
-            cv2.imshow("ORB", img_comp)
-        last_frame = [gray.copy(), orb_kp.copy(), orb_fd.copy()]
+
+        n = int(round(time.time() * 1000))
+        if n - current > update_duration:
+            if not (last_frame is None):
+                cv2.imshow("ORB", img_comp)
+            current = n
+            last_frame = [gray.copy(), orb_kp.copy(), orb_fd.copy()]
         cv2.imshow("Edges", edge.astype(np.float32))
         cv2.imshow("Distance", dt/dt.max())
         markers[markers>0] = 1
@@ -780,4 +785,4 @@ def perform_image_segmentation():
     plt.show()
     cap.release()
     cv2.destroyAllWindows()
-perform_image_segmentation()
+#perform_image_segmentation()

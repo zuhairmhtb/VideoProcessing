@@ -1,9 +1,11 @@
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QGroupBox, QPushButton, QScrollArea,\
-    QWidget, QAction, QTabWidget, QLabel, QSlider, QCheckBox, QTextEdit, QLineEdit, QComboBox
+    QWidget, QAction, QTabWidget, QLabel, QSlider, QCheckBox, QTextEdit, QLineEdit, QComboBox, QFormLayout
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage
 import cv2
+from collections import OrderedDict
 from MyNet.image_segmentation.video_processing_software.widgets import ImageDisplayWidget, GraphDisplayWidget
+
 
 class CommonLayout(QHBoxLayout):
     def __init__(self, parent):
@@ -662,4 +664,161 @@ class NeuralNetworkLayout(CommonLayout):
         self.default_frame_image_path = "D:\\default.png"
         self.plot_width = 400
         self.plot_height = 200
+
+class ImageAnnotationLayout(CommonLayout):
+    def __init__(self, parent, default_frame_width=200, default_frame_height=200):
+        super(ImageAnnotationLayout, self).__init__(parent)
+        self.my_parent = parent
+        self.default_frame_width = default_frame_width
+        self.default_frame_height = default_frame_height
+        self.default_frame_image_path = "D:\\default.png"
+        self.plot_width = 400
+        self.plot_height = 200
+        self.hog_cells_per_block = 1
+        self.hog_pixels_per_cell = 16
+        self.hog_orientation = 8
+        self.kmeans_clusters = 20
+        self.orb_features = 100
+        self.img_mode = ['rgb', 'gray'] # rgb or gray
+        self.annotation_img_view_options = ['color', 'edges', 'orientation', 'distance', 'clusters', 'orb']
+        self.image_props = ['Color', 'Orientation', 'Region Properties & Clusters', 'Edges', 'ORB Features', 'Distance']
+        self.base_img_folder = 'annotated_images'
+        self.base_img_save_dir = "D:\\thesis\\ConvNet\\MyNet\\image_segmentation\\"+self.base_img_folder+"\\"
+        self.view_images_per_row = 2
+        self.view_widgets = OrderedDict()
+
+        for img_type in self.annotation_img_view_options:
+            self.view_widgets[img_type] = {
+                'widget': ImageDisplayWidget(self.parent, self.default_frame_image_path, self.default_frame_width, self.default_frame_height),
+            }
+
+        self.image_opt_widgets = OrderedDict()
+        self.image_opt_widgets['load image path'] = {
+                'widget': QLineEdit(self.parent),
+                'default': "D:\\path\\to\\file.extension"
+            }
+        self.image_opt_widgets['load image button'] = {
+                'widget': QPushButton("Load Image", self.parent),
+                'default': None
+            }
+        self.image_opt_widgets['hog cells per block'] = {
+                'widget': QLineEdit(self.parent),
+                'default': self.hog_cells_per_block
+            }
+        self.image_opt_widgets['hog pixels per cell'] = {
+                'widget': QLineEdit(self.parent),
+                'default': self.hog_pixels_per_cell
+            }
+        self.image_opt_widgets['hog orientations'] = {
+                'widget': QLineEdit(self.parent),
+                'default': self.hog_orientation
+            }
+        self.image_opt_widgets['total orb features'] = {
+                'widget': QLineEdit(self.parent),
+                'default': self.orb_features
+            }
+        self.image_opt_widgets['hold frame'] =  {
+                'widget': QCheckBox("", self.parent),
+                'default': False
+            }
+        self.image_opt_widgets['image width'] = {
+            'widget': QLineEdit(self.parent),
+            'default': self.default_frame_width
+        }
+        self.image_opt_widgets['image height'] = {
+            'widget': QLineEdit(self.parent),
+            'default': self.default_frame_height
+        }
+        self.image_opt_widgets['image mode'] = {
+            'widget': QComboBox(self.parent),
+            'default': self.img_mode
+        }
+
+        self.annotate_opt_widgets = OrderedDict()
+        self.annotate_opt_widgets['annotation view mode'] = {
+            'widget': QComboBox(self.parent),
+            'default': self.annotation_img_view_options
+        }
+        self.annotate_opt_widgets['start annotation'] = {
+            'widget': QPushButton("Start Annotation", self.parent),
+            'default': None
+        }
+        self.annotate_opt_widgets['region properties'] = {
+            'widget': QPushButton("View Region Properties", self.parent),
+            'default': None
+        }
+
+        self.save_opt_widgets = OrderedDict()
+        self.save_opt_widgets['base directory'] = {
+            'widget': QLineEdit(self.parent),
+            'default': self.base_img_save_dir
+        }
+        self.containers = OrderedDict()
+
+        self.image_opt_container = QGroupBox("Image Parameters", self.parent)
+        self.image_opt_layout = QVBoxLayout(self.parent)
+        self.image_opt_container.setLayout(self.image_opt_layout)
+        for widget in self.image_opt_widgets:
+            if type(self.image_opt_widgets[widget]['widget']) == QLineEdit:
+                self.image_opt_widgets[widget]['widget'].setText(str(self.image_opt_widgets[widget]['default']))
+            elif type(self.image_opt_widgets[widget]['widget']) == QComboBox:
+                for i in range(len(self.image_opt_widgets[widget]['default'])):
+                    self.image_opt_widgets[widget]['widget'].addItem(str(self.image_opt_widgets[widget]['default'][i]))
+
+            form_box = QGroupBox("", self.parent)
+            form_layout = QFormLayout(self.parent)
+            form_box.setLayout(form_layout)
+            form_layout.addRow(QLabel(str(widget).upper()), self.image_opt_widgets[widget]['widget'])
+            self.image_opt_layout.addWidget(form_box)
+        self.control_widget_layout.addWidget(self.image_opt_container)
+
+        self.annotate_opt_container = QGroupBox("Annotation Parameters", self.parent)
+        self.annotate_opt_layout = QVBoxLayout(self.parent)
+        self.annotate_opt_container.setLayout(self.annotate_opt_layout)
+        for widget in self.annotate_opt_widgets:
+            if type(self.annotate_opt_widgets[widget]['widget']) == QLineEdit:
+                self.annotate_opt_widgets[widget]['widget'].setText(str(self.annotate_opt_widgets[widget]['default']))
+            elif type(self.annotate_opt_widgets[widget]['widget']) == QComboBox:
+                for i in range(len(self.annotate_opt_widgets[widget]['default'])):
+                    self.annotate_opt_widgets[widget]['widget'].addItem(str(self.annotate_opt_widgets[widget]['default'][i]))
+
+            form_box = QGroupBox("", self.parent)
+            form_layout = QFormLayout(self.parent)
+            form_box.setLayout(form_layout)
+            form_layout.addRow(QLabel(str(widget).upper()), self.annotate_opt_widgets[widget]['widget'])
+            self.annotate_opt_layout.addWidget(form_box)
+        self.control_widget_layout.addWidget(self.annotate_opt_container)
+
+        self.save_opt_container = QGroupBox("Save Parameters", self.parent)
+        self.save_opt_layout = QVBoxLayout(self.parent)
+        self.save_opt_container.setLayout(self.save_opt_layout)
+        for widget in self.save_opt_widgets:
+            if type(self.save_opt_widgets[widget]['widget']) == QLineEdit:
+                self.save_opt_widgets[widget]['widget'].setText(str(self.save_opt_widgets[widget]['default']))
+            elif type(self.save_opt_widgets[widget]['widget']) == QComboBox:
+                for i in range(len(self.save_opt_widgets[widget]['default'])):
+                    self.save_opt_widgets[widget]['widget'].addItem(str(self.save_opt_widgets[widget]['default'][i]))
+
+            form_box = QGroupBox("", self.parent)
+            form_layout = QFormLayout(self.parent)
+            form_box.setLayout(form_layout)
+            form_layout.addRow(QLabel(str(widget).upper()), self.save_opt_widgets[widget]['widget'])
+            self.save_opt_layout.addWidget(form_box)
+        self.control_widget_layout.addWidget(self.save_opt_container)
+
+        layout = None
+        i=0
+        for img in self.view_widgets:
+            if i%self.view_images_per_row == 0:
+                container = QGroupBox("", self.parent)
+                layout = QHBoxLayout()
+                container.setLayout(layout)
+                self.view_widget_layout.addWidget(container)
+
+            layout.addWidget(self.view_widgets[img]['widget'])
+            self.view_widgets[img]['widget'].update_image(self.view_widgets[img]['widget'].default_img)
+            i+=1
+
+
+
 

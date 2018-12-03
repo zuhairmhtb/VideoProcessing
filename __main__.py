@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGr
 from PyQt5.QtGui import QIcon
 from MyNet.image_segmentation.video_processing_software.interfaces import MainInterface
 from MyNet.image_segmentation.video_processing_software.widgets import MyTabWidget
-from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout
+from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout, ImageAnnotationLayout
 from MyNet.image_segmentation.video_processing_software.controllers import WebcamPlayerController, VideoProcessingController
 
 
@@ -120,6 +120,8 @@ class App(QMainWindow):
         self.available_interfaces = OrderedDict()
         self.available_interfaces["Webcam Player"] = WebcamPlayerLayout(self, default_original_frame_width, default_original_frame_height)
         self.available_interfaces["Video Processing"] = VideoProcessingLayout(self, default_original_frame_width, default_original_frame_height)
+        self.available_interfaces["Image Annotation"] = ImageAnnotationLayout(self, default_original_frame_width,
+                                                                              default_original_frame_height)
         self.available_interfaces["Neural Network"] = NeuralNetworkLayout(self, default_original_frame_width, default_original_frame_height)
 
 
