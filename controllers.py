@@ -164,6 +164,132 @@ class CommonInstance(QThread):
         pass
     def stop_thread(self):
         pass
+class ImageAnnotationController(CommonInstance):
+    """
+    This is the Image Annotation Interface that runs on a separate thread and can annotate Images either loaded from
+    a drive or frames that appear when streaming with a video input device like WebcamPlayerController by acquiring
+    the frames stored in the main thread.
+    A. System defined Tasks:
+    1. Initiated by the main thread and stopped by the main thread.
+    2. Runs in a loop while active.
+    3. If 'Frame Input Mode' is active then:
+        3.1 Deactivate Image Annotation Mode
+        3.2 Receive a stored frame object from the main thread
+        3.3 If the frame is available then calculate the following features from the frame:
+            3.2.1 RGB COLOR IMAGE(Stored in frame)
+            3.2.2 ORIENTATION MAP(Histogram of Oriented Gradients)
+            3.2.3 Edge Detection(Stored in the frame)
+            3.2.4 DISTANCE MAP(From the Edge image-Euclidean Distance from the edges)
+            3.2.5 CLUSTERS OF SEGMENTED IMAGE(Watershed Algorithm with mean intensity of distance map as markers and
+                  K-Means Clustering)
+            3.2.6 FEATURE DESCRIPTORS(Oriented Fast and Rotated Brief Algorithm)
+            3.2.7 REGION PROPERTIES(From Clusters of segmented image)
+        3.4 Display the features in GUI
+        3.5 Set the last frame processed objects as the list of features obtained
+    4. Else if the FIM is inactive then:
+        4.1 Update the GUI with last frame processed objects(if available).
+        4.2 Activate Image Annotation Mode for the user to interact with the loaded image
+    5. Deactivate Image Annotation Mode and FIM when the loop ends
+
+    B. User defined Tasks:
+    1. Choose an Image from the calculated features in order to guide annotation(Annotate Image View Option-ComboBox).
+    2. Load an Image from computer in order to annotate. The loaded image undergoes the complete feature extraction
+       steps(3.3 and 3.4) before being displayed in the GUI and replaces last processed feature object.
+    3. Create a window for Annotating the last processed frames with GUI(Main Image Annotation GUI Module).
+    4. View Region Property parameters of different clusters of the segmented image.
+    5. Save annotated image as a whole(In PASCAL VOC FORMAT) along with the features obtained from the image as numpy
+       array or bytes in a 'Data Hierarchical Structure'.
+    6. Save only annotated portions of the image(with a black background) as separate data files.
+
+
+    C. Image Annotation Functionality:
+    1. Draw boundary around an object(in the image). The boundary might be rectangular, elliptical, Polygonal(Point based)
+       or Freehand(Drawing a closed contour with cursor).
+    2. Provide each contour one or more label in a 'Data Hierarchical Structure'.
+    3. Save the annotated segments individually with a colored(black) background for region not belonging
+       to the annotated segment along with its separate features.
+       or as a whole image along with the complete feature list object.
+    4. Save images or features as numpy array(or byte) and annotation information(PASCAL VOC Format) as XML or JSON file
+
+    D. Saving an individual Annotated Segment of the image:
+    1. Take the annotated segment which is being saved.
+    2. Put it infront of black background.
+    3. Label the background as 0 and their corresponding features as null(or zero in most cases).
+    4. Save the recalculated features and corresponding files in the 'Data Hierarchical Structure'
+
+    E. Saving whole image with multiple annotations and segments:
+    1. Take the whole image.
+    2. Save the features and corresponding files as multiple copies for each annotated segment in'Data Hierarchical Structure'
+
+
+    F. DATA HIERARCHICAL STRUCTURE
+    1. Each annotated image has the following files:
+       a. A set of Feature files(Numpy arrays)
+       b. An annotation file(JSON or XML file according to PASCAL VOC FORMAT) where each segment contains a id
+          (starting from 0 as the background)
+        e.g.
+       <annotation>
+            <folder>GeneratedData_Train</folder>
+            <filename>000001.png</filename>
+            <path>/my/path/GeneratedData_Train/000001.png</path>
+            <source>
+                <database>Unknown</database>
+            </source>
+            <size>
+                <width>224</width>
+                <height>224</height>
+                <depth>3</depth>
+            </size>
+            <segmented>0</segmented>
+            <object>
+                <name>21</name> <!-- ID of the segemnt/object -->
+                <pose>Frontal</pose>
+                <truncated>0</truncated>
+                <difficult>0</difficult>
+                <occluded>0</occluded>
+                <bndbox>
+                    <xmin>82</xmin>
+                    <xmax>172</xmax>
+                    <ymin>88</ymin>
+                    <ymax>146</ymax>
+                </bndbox>
+            </object>
+        </annotation>
+       c. A label file containing labels in a hierarchical structure for each corresponding segment ID where each
+          level of the hierarchy corresponds to similarity in context.
+
+          e.g.
+          {
+            "21" : {
+                "value": {
+                    "physical attributes": ["Fruit", "Apple", "Red", "Circular", "Elliptical", "Circular"],
+                    "physical condition": ["Eaten", "Chewed", "fresh", "Ripe"]
+                }
+            },
+            "22": {
+                "value": {
+                    "physical properties": ["Table", "Wooden", "Rectangular", "brown", "Furniture"],
+                    "visual condition": ["Filled with food", "Low Height"]
+                }
+            }
+
+          }
+        d. Complete folder structure for an annotated Image:
+           Example:
+               current time: 11:15:32AM
+               current date: 12-12-2018
+               current user_id: 1
+           1. 11_15_32_12_12_2018_1 (Folder)
+               1.1 RGB/GrayScale Image(Numpy Array)
+               1.2 Orientation Map Image(Numpy Array-GrayScale)
+               1.3 Orientation Map Features(Numpy Array-Optional)
+               1.4 Edge Map Image(Numpy Array-Binary)
+               1.5 Clusters of the segmentation(List)
+               1.6 Region Properties(List of Numpy Array-For the clusters)
+               1.7 Feature Descriptors(ORB Object)
+               1.8 Annotation File(XML-PASCAL VOC)
+               1.9 Label File(JSON-Data Hierarchical Structure)
+    """
 class VideoProcessingController(CommonInstance):
     """
     This is the Video Processing interface that runs on a separate thread and uses Image Processing on Images
