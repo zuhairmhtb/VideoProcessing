@@ -40,6 +40,7 @@ in order to display in GUI.
 5. widgets.py: Reusable PyQt5 customized widgets in order to use in layouts.
 
 Image Features Calculation:
+
 1. RGB COLOR IMAGE(Stored in frame)
 2 ORIENTATION MAP(Histogram of Oriented Gradients)
 3 Edge Detection(Stored in the frame)
@@ -52,11 +53,16 @@ Image Features Calculation:
 (For Full Documentation, see controllers.py-->ImageAnnotationController)
 
 Data Hierarchical Structure:
+
     1. Each annotated image saved in a folder with unique name(time_userid) has the following files:
+
        a. A set of Feature files(Numpy arrays) - See implemented features for all feature file names
+
        b. An annotation file(JSON or XML file according to PASCAL VOC FORMAT) where each segment contains a id
           (starting from 0 as the background)
+
         e.g.
+        ```xml
        <annotation>
             <folder>GeneratedData_Train</folder>
             <filename>000001.png</filename>
@@ -84,10 +90,12 @@ Data Hierarchical Structure:
                 </bndbox>
             </object>
         </annotation>
+        ```
        c. A label file containing labels in a hierarchical structure for each corresponding segment ID where each
           level of the hierarchy corresponds to similarity in context.
 
           e.g.
+
           {
             "21" : {
                 "value": {
@@ -105,11 +113,14 @@ Data Hierarchical Structure:
           }
 
        d. Complete folder structure for an annotated Image:
+
            Example:
+
                current time: 11:15:32AM
                current date: 12-12-2018
                current user_id: 1
            1. 11_15_32_12_12_2018_1 (Folder)
+
                1.1 RGB/GrayScale Image(Numpy Array)
                1.2 Orientation Map Image(Numpy Array-GrayScale)
                1.3 Orientation Map Features(Numpy Array-Optional)
