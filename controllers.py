@@ -23,7 +23,7 @@ from skimage.util import img_as_float
 from tensorflow import Graph, Session
 from keras import backend as K
 
-from MyNet.image_segmentation.video_processing_software.layouts import ImageAnnotationLayout
+from layouts import ImageAnnotationLayout
 
 
 # your logic here
@@ -313,6 +313,7 @@ class ImageAnnotationController(CommonInstance):
         self.hold_frame = self.layout.image_opt_widgets['hold frame']['widget'].isChecked()
         self.img_mode = self.layout.image_opt_widgets['image mode']['widget'].currentText()
         self.img_save_dir = self.layout.base_img_save_dir
+        self.annotation_view_mode = str(self.layout.annotate_opt_widgets['annotation view mode']['widget'].currentText())
 
         self.last_updated_features = None
 
@@ -320,6 +321,150 @@ class ImageAnnotationController(CommonInstance):
     def stop_thread(self):
         self.should_run = False
 
+    def load_image(self):
+        if self.hold_frame:
+            url = str(self.layout.image_opt_widgets['load image path']['widget'].text())
+            if os.path.exists(url):
+                img = cv2.imread(url)
+                if len(img.shape) == 3:
+                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                else:
+                    gray = img.copy()
+                edge = cv2.Canny(gray, 50, 50)
+
+                fd, hog_image, dt, local_max, markers, labels, regions, region_means, classified_labels, orb_kp, orb_fd, orb_img = self.calculate_features(img, gray, edge)
+                self.update_features(img, gray, edge, fd, hog_image, dt, local_max, markers, labels, regions, region_means,
+                                     classified_labels, orb_kp, orb_fd, orb_img)
+            print("Loading Image from " + url)
+        else:
+            print("Hold frame to load image")
+
+    def set_hog_cpb(self):
+        try:
+            cpb = int(self.layout.image_opt_widgets['hog cells per block']['widget'].text())
+            if cpb > 0:
+                self.hog_cells_per_block = cpb
+        except:
+            pass
+    def set_hog_ppc(self):
+        try:
+            ppc = int(self.layout.image_opt_widgets['hog pixels per cell']['widget'].text())
+            if ppc > 0:
+                self.hog_pixels_per_cell = ppc
+        except:
+            pass
+    def set_hog_orientation(self):
+        try:
+            ori = int(self.layout.image_opt_widgets['hog orientations']['widget'].text())
+            if ori > 0:
+                self.hog_orientation = ori
+        except:
+            pass
+    def set_orb_features(self):
+        try:
+            orb = int(self.layout.image_opt_widgets['total orb features']['widget'].text())
+            if orb > 0:
+                self.orb_features = orb
+        except:
+            pass
+    def set_hold_frame(self):
+        self.hold_frame = self.layout.image_opt_widgets['hold frame']['widget'].isChecked()
+    def set_img_width(self):
+        try:
+            img_w = int(self.layout.image_opt_widgets['image width']['widget'].text())
+            if img_w > 0:
+                self.frame_width = img_w
+        except:
+            pass
+    def set_img_height(self):
+        try:
+            img_h = int(self.layout.image_opt_widgets['image height']['widget'].text())
+            if img_h > 0:
+                self.frame_height = img_h
+        except:
+            pass
+    def set_img_mode(self):
+        self.img_mode = str(self.layout.image_opt_widgets['image mode']['widget'].currentText())
+    def set_annotation_view_mode(self):
+        self.annotation_view_mode = str(self.layout.annotate_opt_widgets['annotation view mode']['widget'].currentText())
+    def start_annotation_btn(self):
+        print("Starting Image Annotation")
+    def regionprop_view_btn(self):
+        print("Viewing region properties")
+    def save_annotation_btn(self):
+        print("saving annotation at " + str(self.layout.save_opt_widgets['base directory']['widget'].text()))
+
+    def calculate_features(self, frame, gray, edge):
+        fd, hog_image = feature.hog(gray, orientations=self.hog_orientation,
+                                    pixels_per_cell=(self.hog_pixels_per_cell, self.hog_pixels_per_cell),
+                                    cells_per_block=(self.hog_cells_per_block, self.hog_cells_per_block),
+                                    visualize=True, multichannel=False, feature_vector=False)
+        # result_view_frame.append(hog_image.copy())
+        # result_view_frame.append(fd)
+
+        dt = distance_transform_edt((~edge))  # Euclidean distance from edge
+        # result_view_frame.append(dt.copy())
+        # dt = cv2.erode(dt, np.ones((10, 10)), iterations=1)
+        # Local Peaks by calculating the Euclidean distance map
+        # (Create automated markers for watershed background extraction)
+        local_max = feature.peak_local_max(dt, indices=False, min_distance=5)
+        # Create the markers from the local peaks(Connected component from the local max map)
+        markers = measure.label(local_max)
+        # Watershed algorithm to segment connected components from the negative Euclidean distance map
+        labels = watershed(-dt, markers)
+
+        # Calculate Region Properties from the watershed segmented map
+        regions = measure.regionprops(labels, intensity_image=gray)
+
+        # result_view_frame.append(regions)
+        # Calculate Mean intensities for each region of the  watershed segmented map
+        # in order for background segmentation using KMeans Clustering
+        region_means = [
+            [r.local_centroid[0], r.local_centroid[1], np.average(frame[r.coords[:, 0], r.coords[:, 1], 0]),
+             np.average(frame[r.coords[:, 0], r.coords[:, 1], 1]),
+             np.average(frame[r.coords[:, 0], r.coords[:, 1], 2])]
+            for r in regions]
+        # Reshape the mean intensity array as single column
+        region_means = np.asarray(region_means).reshape(-1, len(region_means[0]))
+
+        classified_labels = None
+        if region_means.size > 0 and len(regions) >= self.kmeans_clusters - 1:
+            # Fit mean intensities of the watershed background map as a feature vector of the model
+            model = KMeans(n_clusters=self.kmeans_clusters)
+            model.fit(region_means)
+            # Predict foreground and background labels for mean intensity of each region of the watershed segmented map
+            kmeans_segmentation = model.predict(region_means)
+            # Get a copy of the watershed segmented map of different connected components in the image
+            classified_labels = labels.copy()
+            # For each label/cluster(background or foreground) of mean intensity of each connected component
+            for bg_fg, region in zip(kmeans_segmentation, regions):
+                # Set the color of the region as predicted label(foreground or background)
+                classified_labels[tuple(region.coords.T)] = bg_fg
+        # result_view_frame.append(classified_labels)
+
+        orb = cv2.ORB_create(nfeatures=self.orb_features)
+        orb_kp, orb_fd = orb.detectAndCompute(gray, None)
+        orb_img = cv2.drawKeypoints(gray, orb_kp, None)
+        return fd, hog_image, dt, local_max, markers, labels, regions, region_means, classified_labels, orb_kp, orb_fd, orb_img
+
+    def update_features(self, frame, gray, edge, fd, hog_image, dt, local_max, markers, labels, regions, region_means, classified_labels, orb_kp, orb_fd, orb_img):
+        # self.annotation_img_view_options = ['color', 'edges', 'orientation', 'distance', 'clusters', 'orb']
+        self.layout.view_widgets['color']['widget'].update_image(frame)
+        self.layout.view_widgets['edges']['widget'].update_image(
+            ((edge / edge.max()) * 255).astype(np.uint8)
+        )
+        self.layout.view_widgets['orientation']['widget'].update_image(
+            ((exposure.rescale_intensity(hog_image, in_range=(0, hog_image.max()))) * 255).astype(np.uint8)
+        )
+
+        self.layout.view_widgets['distance']['widget'].update_image(
+            ((exposure.rescale_intensity(dt, in_range=(dt.min(), dt.max()))) * 255).astype(np.uint8)
+        )
+        if not (classified_labels is None):
+            self.layout.view_widgets['clusters']['widget'].update_image(
+                ((classified_labels.astype(np.float64) / classified_labels.max()) * 255).astype(np.uint8)
+            )
+        self.layout.view_widgets['orb']['widget'].update_image(orb_img)
     def run(self):
         print("Starting Image Annotation Thread")
         self.should_run = True
@@ -335,98 +480,30 @@ class ImageAnnotationController(CommonInstance):
                     # Result frame containing features: [raw frame(RGB/Gray), Edge frame(Binary), Orientation Frame(Gray),
                     # orientation features(List), Distance Map(Gray), Region Properties(List),
                     #Cluster Image(RGB), Feature Descriptor(Array), Feature Descriptor Image(Array)]
-                    result_view_frame = []
+                    #result_view_frame = []
                     frame = cv2.resize(current_frame[1], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
-                    result_view_frame.append(frame)
+                    #result_view_frame.append(frame)
                     gray = cv2.resize(current_frame[2], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
                     gray = exposure.equalize_hist(gray)
                     gray = median(gray, selem=np.ones((5, 5)))
                     edge = cv2.resize(current_frame[3], (self.frame_width, self.frame_height), interpolation=cv2.INTER_CUBIC).copy()
 
-                    result_view_frame.append(edge)
+                    fd, hog_image, dt, local_max, markers, labels, regions, region_means, classified_labels, orb_kp, orb_fd, orb_img = self.calculate_features(frame, gray, edge)
+                    #result_view_frame.append(edge)
 
 
+                    #result_view_frame.append((orb_kp, orb_fd))
+                    #result_view_frame.append(orb_img)
 
-                    fd, hog_image = feature.hog(gray, orientations=self.hog_orientation,
-                                                pixels_per_cell=(self.hog_pixels_per_cell, self.hog_pixels_per_cell),
-                                                cells_per_block=(self.hog_cells_per_block, self.hog_cells_per_block),
-                                                visualize=True, multichannel=False, feature_vector=False)
-                    result_view_frame.append(hog_image.copy())
-                    result_view_frame.append(fd)
+                    self.update_features(frame, gray, edge, fd, hog_image, dt, local_max, markers, labels, regions, region_means, classified_labels, orb_kp, orb_fd, orb_img)
 
-
-
-                    dt = distance_transform_edt((~edge))  # Euclidean distance from edge
-                    result_view_frame.append(dt.copy())
-                    # dt = cv2.erode(dt, np.ones((10, 10)), iterations=1)
-                    # Local Peaks by calculating the Euclidean distance map
-                    # (Create automated markers for watershed background extraction)
-                    local_max = feature.peak_local_max(dt, indices=False, min_distance=5)
-                    # Create the markers from the local peaks(Connected component from the local max map)
-                    markers = measure.label(local_max)
-                    # Watershed algorithm to segment connected components from the negative Euclidean distance map
-                    labels = watershed(-dt, markers)
-
-                    # Calculate Region Properties from the watershed segmented map
-                    regions = measure.regionprops(labels, intensity_image=gray)
-                    result_view_frame.append(regions)
-                    # Calculate Mean intensities for each region of the  watershed segmented map
-                    # in order for background segmentation using KMeans Clustering
-                    region_means = [
-                        [r.local_centroid[0], r.local_centroid[1], np.average(frame[r.coords[:, 0], r.coords[:, 1], 0]),
-                         np.average(frame[r.coords[:, 0], r.coords[:, 1], 1]),
-                         np.average(frame[r.coords[:, 0], r.coords[:, 1], 2])]
-                        for r in regions]
-                    # Reshape the mean intensity array as single column
-                    region_means = np.asarray(region_means).reshape(-1, len(region_means[0]))
-
-
-                    classified_labels = None
-                    if region_means.size > 0 and np.count_nonzero(region_means) >= self.kmeans_clusters - 1:
-                        # Fit mean intensities of the watershed background map as a feature vector of the model
-                        model = KMeans(n_clusters=self.kmeans_clusters)
-                        model.fit(region_means)
-                        # Predict foreground and background labels for mean intensity of each region of the watershed segmented map
-                        kmeans_segmentation = model.predict(region_means)
-                        # Get a copy of the watershed segmented map of different connected components in the image
-                        classified_labels = labels.copy()
-                        # For each label/cluster(background or foreground) of mean intensity of each connected component
-                        for bg_fg, region in zip(kmeans_segmentation, regions):
-                            # Set the color of the region as predicted label(foreground or background)
-                            classified_labels[tuple(region.coords.T)] = bg_fg
-                    result_view_frame.append(classified_labels)
-
-
-                    orb = cv2.ORB_create(nfeatures=self.orb_features)
-                    orb_kp, orb_fd = orb.detectAndCompute(gray, None)
-                    orb_img = cv2.drawKeypoints(gray, orb_kp, None)
-                    result_view_frame.append((orb_kp, orb_fd))
-                    result_view_frame.append(orb_img)
-
-                    # self.annotation_img_view_options = ['color', 'edges', 'orientation', 'distance', 'clusters', 'orb']
-                    self.layout.view_widgets['color']['widget'].update_image(frame)
-                    self.layout.view_widgets['edges']['widget'].update_image(
-                        ((edge/edge.max()) * 255).astype(np.uint8)
-                    )
-                    self.layout.view_widgets['orientation']['widget'].update_image(
-                        ((exposure.rescale_intensity(hog_image, in_range=(0,hog_image.max())))*255).astype(np.uint8)
-                    )
-
-                    self.layout.view_widgets['distance']['widget'].update_image(
-                        ((exposure.rescale_intensity(dt, in_range=(dt.min(), dt.max()))) * 255).astype(np.uint8)
-                    )
-                    if not (classified_labels is None):
-                        self.layout.view_widgets['clusters']['widget'].update_image(
-                            ((classified_labels.astype(np.float64)/classified_labels.max())*255).astype(np.uint8)
-                        )
-                    self.layout.view_widgets['orb']['widget'].update_image(orb_img)
-
-                    self.last_updated_features = result_view_frame
+                    #self.last_updated_features = result_view_frame
+                    self.last_updated_features = [frame, gray, edge]
             else:
                 # Result frame containing features: [raw frame(RGB/Gray), Edge frame(Binary), Orientation Frame(Gray),
                 # orientation features(List), Distance Map(Gray), Region Properties(List),
                 # Cluster Image(RGB), Feature Descriptor(Array), Feature Descriptor Image(Array)]
-                if not (self.last_updated_features is None):
+                """if not (self.last_updated_features is None):
                     self.layout.view_widgets['color']['widget'].update_image(result_view_frame[0])
                     self.layout.view_widgets['edges']['widget'].update_image(
                         ((result_view_frame[1] / result_view_frame[1].max()) * 255).astype(np.uint8)
@@ -442,7 +519,9 @@ class ImageAnnotationController(CommonInstance):
                         self.layout.view_widgets['clusters']['widget'].update_image(
                             ((result_view_frame[6].astype(np.float64) / result_view_frame[6].max()) * 255).astype(np.uint8)
                         )
-                    self.layout.view_widgets['orb']['widget'].update_image(result_view_frame[8])
+                    self.layout.view_widgets['orb']['widget'].update_image(result_view_frame[8])"""
+
+                pass
 
 
             self.sleep(self.thread_sleep_time_sec)
@@ -949,7 +1028,8 @@ def perform_image_segmentation():
         #print(str(type(local_max)) + " " + str(local_max.shape) + " max: " + str(local_max.max()))
         #segments = slic(frame, n_segments=100, compactness=10, sigma=1)
         #segments = felzenszwalb(gray, scale=100, sigma=0.5, min_size=100)
-
+        import pdb
+        pdb.set_trace()
         cv2.imshow("Original", frame)
         #cv2.imshow("Superpixels", mark_boundaries(frame, segments))
         #cv2.imshow("Gray", gray)

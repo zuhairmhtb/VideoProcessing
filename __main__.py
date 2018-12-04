@@ -3,10 +3,10 @@ from win32api import GetSystemMetrics
 from collections import OrderedDict
 from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QLabel, QPushButton, QScrollBar, QMainWindow
 from PyQt5.QtGui import QIcon
-from MyNet.image_segmentation.video_processing_software.interfaces import MainInterface
-from MyNet.image_segmentation.video_processing_software.widgets import MyTabWidget
-from MyNet.image_segmentation.video_processing_software.layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout, ImageAnnotationLayout
-from MyNet.image_segmentation.video_processing_software.controllers import WebcamPlayerController, VideoProcessingController, ImageAnnotationController
+from interfaces import MainInterface
+from widgets import MyTabWidget
+from layouts import WebcamPlayerLayout, VideoProcessingLayout, NeuralNetworkLayout, ImageAnnotationLayout
+from controllers import WebcamPlayerController, VideoProcessingController, ImageAnnotationController
 
 
 import  numpy as np
@@ -112,10 +112,10 @@ class App(QMainWindow):
 
 
         # Core Interface layout
-        default_original_frame_width = 200
-        default_original_frame_height = 200
-        default_edge_frame_width = 200
-        default_edge_frame_height = 200
+        default_original_frame_width = 352
+        default_original_frame_height = 288
+        default_edge_frame_width = 352
+        default_edge_frame_height = 288
         QApplication.instance().aboutToQuit.connect(self.cleanUp)
         self.available_interfaces = OrderedDict()
         self.available_interfaces["Webcam Player"] = WebcamPlayerLayout(self, default_original_frame_width, default_original_frame_height)
@@ -127,6 +127,30 @@ class App(QMainWindow):
 
         # Image Annotation Setup
         self.image_annotation_controller = ImageAnnotationController(self, self.available_interfaces["Image Annotation"])
+        image_annotate_int = self.available_interfaces["Image Annotation"]
+        image_annotate_int.image_opt_widgets['load image button']['widget'].clicked.connect(self.image_annotation_controller.load_image)
+        image_annotate_int.image_opt_widgets['hog cells per block']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_hog_cpb)
+        image_annotate_int.image_opt_widgets['hog pixels per cell']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_hog_ppc)
+        image_annotate_int.image_opt_widgets['hog orientations']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_hog_orientation)
+        image_annotate_int.image_opt_widgets['total orb features']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_orb_features)
+        image_annotate_int.image_opt_widgets['hold frame']['widget'].clicked.connect(
+            self.image_annotation_controller.set_hold_frame)
+        image_annotate_int.image_opt_widgets['image width']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_img_width)
+        image_annotate_int.image_opt_widgets['image height']['widget'].textChanged.connect(
+            self.image_annotation_controller.set_img_height)
+        image_annotate_int.image_opt_widgets['image mode']['widget'].currentTextChanged.connect(
+            self.image_annotation_controller.set_img_mode)
+        image_annotate_int.annotate_opt_widgets['annotation view mode']['widget'].currentTextChanged.connect(
+            self.image_annotation_controller.set_annotation_view_mode)
+        image_annotate_int.annotate_opt_widgets['start annotation']['widget'].clicked.connect(
+            self.image_annotation_controller.start_annotation_btn)
+        image_annotate_int.annotate_opt_widgets['region properties']['widget'].clicked.connect(
+            self.image_annotation_controller.regionprop_view_btn)
 
 
         # Video Processor Setup
@@ -274,16 +298,21 @@ class App(QMainWindow):
         if not self.image_annotation_controller.should_run:
             self.image_annotation_controller.start()
     def stop_stream(self):
-        if self.webcam_player_controller.should_run:
-            self.webcam_player_controller.should_run = False
         if self.image_annotation_controller.should_run:
-            self.image_annotation_controller.should_run = False
+            self.image_annotation_controller.stop_thread()
+            self.image_annotation_controller.wait()
+        if self.webcam_player_controller.should_run:
+            self.webcam_player_controller.stop_thread()
+            self.webcam_player_controller.wait()
+
+
 
     def change_brightness_params(self):
         brightness_controls = self.available_interfaces["Webcam Player"].brightness_control_sliders
         brightness = int(brightness_controls["brightness"].value())
         if brightness < self.cont_bri_shar_thresh:
             self.webcam_player_controller.brightness_level = brightness
+
         else:
             self.webcam_player_controller.brightness_level = float(brightness / 100)
     def change_contrast_params(self):
@@ -438,12 +467,15 @@ class App(QMainWindow):
         print("Quitting")
         if self.webcam_player_controller.isRunning() or self.webcam_player_controller.should_run:
             self.webcam_player_controller.stop_thread()
+            self.webcam_player_controller.wait()
 
         if self.video_processing_controller.isRunning() or self.video_processing_controller.should_run:
             self.video_processing_controller.stop_thread()
+            self.video_processing_controller.wait()
 
         if self.image_annotation_controller.isRunning() or self.image_annotation_controller.should_run:
             self.image_annotation_controller.stop_thread()
+            self.image_annotation_controller.wait()
 
         #self.video_processing_controller.neural_net.save_model()
 

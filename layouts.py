@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage
 import cv2
 from collections import OrderedDict
-from MyNet.image_segmentation.video_processing_software.widgets import ImageDisplayWidget, GraphDisplayWidget
+from widgets import ImageDisplayWidget, GraphDisplayWidget
 
 
 class CommonLayout(QHBoxLayout):
