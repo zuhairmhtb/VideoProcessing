@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage
 import cv2
 from collections import OrderedDict
-from widgets import ImageDisplayWidget, GraphDisplayWidget
+from widgets import ImageDisplayWidget, GraphDisplayWidget, AnnotationWindow
 
 
 class CommonLayout(QHBoxLayout):
@@ -686,6 +686,7 @@ class ImageAnnotationLayout(CommonLayout):
         self.base_img_save_dir = "D:\\thesis\\ConvNet\\MyNet\\image_segmentation\\"+self.base_img_folder+"\\"
         self.view_images_per_row = 2
         self.view_widgets = OrderedDict()
+        self.annotation_window = AnnotationWindow()
 
         for img_type in self.annotation_img_view_options:
             self.view_widgets[img_type] = {
@@ -818,7 +819,5 @@ class ImageAnnotationLayout(CommonLayout):
             layout.addWidget(self.view_widgets[img]['widget'])
             self.view_widgets[img]['widget'].update_image(self.view_widgets[img]['widget'].default_img)
             i+=1
-
-
 
 

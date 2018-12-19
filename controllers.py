@@ -318,6 +318,8 @@ class ImageAnnotationController(CommonInstance):
         self.last_updated_features = None
 
 
+
+
     def stop_thread(self):
         self.should_run = False
 
@@ -389,6 +391,9 @@ class ImageAnnotationController(CommonInstance):
         self.annotation_view_mode = str(self.layout.annotate_opt_widgets['annotation view mode']['widget'].currentText())
     def start_annotation_btn(self):
         print("Starting Image Annotation")
+        if not (self.last_updated_features is None) and self.hold_frame:
+            self.layout.annotation_window.set_annotation_image(self.last_updated_features[0])
+            self.layout.annotation_window.show()
     def regionprop_view_btn(self):
         print("Viewing region properties")
     def save_annotation_btn(self):
@@ -428,7 +433,7 @@ class ImageAnnotationController(CommonInstance):
         region_means = np.asarray(region_means).reshape(-1, len(region_means[0]))
 
         classified_labels = None
-        if region_means.size > 0 and len(regions) >= self.kmeans_clusters - 1:
+        """if region_means.size > 0 and len(regions) >= self.kmeans_clusters - 1:
             # Fit mean intensities of the watershed background map as a feature vector of the model
             model = KMeans(n_clusters=self.kmeans_clusters)
             model.fit(region_means)
@@ -439,7 +444,7 @@ class ImageAnnotationController(CommonInstance):
             # For each label/cluster(background or foreground) of mean intensity of each connected component
             for bg_fg, region in zip(kmeans_segmentation, regions):
                 # Set the color of the region as predicted label(foreground or background)
-                classified_labels[tuple(region.coords.T)] = bg_fg
+                classified_labels[tuple(region.coords.T)] = bg_fg"""
         # result_view_frame.append(classified_labels)
 
         orb = cv2.ORB_create(nfeatures=self.orb_features)
@@ -460,10 +465,10 @@ class ImageAnnotationController(CommonInstance):
         self.layout.view_widgets['distance']['widget'].update_image(
             ((exposure.rescale_intensity(dt, in_range=(dt.min(), dt.max()))) * 255).astype(np.uint8)
         )
-        if not (classified_labels is None):
+        """if not (classified_labels is None):
             self.layout.view_widgets['clusters']['widget'].update_image(
                 ((classified_labels.astype(np.float64) / classified_labels.max()) * 255).astype(np.uint8)
-            )
+            )"""
         self.layout.view_widgets['orb']['widget'].update_image(orb_img)
     def run(self):
         print("Starting Image Annotation Thread")
@@ -710,6 +715,7 @@ class VideoProcessingController(CommonInstance):
                         np.asarray(current_edge_inputs), np.asarray(current_edge_labels))
                     #self.sleep(100)
                     self.sleep(0.01)
+
                     prediction, inp = self.neural_net.predict(
                         np.asarray(current_edge_inputs[-1]))
                     # Resize the predicted noise image for display
