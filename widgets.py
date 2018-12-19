@@ -253,11 +253,17 @@ class AnnotationWindow(QWidget):
         self.reset_image_display()
         self.reset_points()
         self.reset_available_segment_box()
+        self.reset_label_info_view()
     def reset_points(self):
         self.current_point_list = []
         self.all_segment_list = []
 
         self.total_segments_created.setText('0')
+
+    def reset_label_info_view(self):
+        self.segment_label_inp.setText("")
+        self.segment_name_inp.setText("")
+        self.occluded_checkbox.setChecked(False)
     def reset_available_segment_box(self):
         # Reset ComboBox for available segments
         self.select_segment_combobox.clear()
@@ -304,6 +310,7 @@ class AnnotationWindow(QWidget):
 
     def view_segment(self):
         self.reset_image_display()
+        self.reset_label_info_view()
         if self.select_segment_combobox.currentText().lower() == 'all':
             for i in range(len(self.all_segment_list)):
                 self.draw_segment(self.all_segment_list[i][0])
